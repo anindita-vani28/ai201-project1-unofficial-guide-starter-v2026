@@ -20,14 +20,12 @@ happened into your run log — that's the evidence for criterion 3.
 Swap them for your own if you like. Keep five of them either way: criterion 3
 names a target of "4 of 5", and four of three is not a thing.
 """
-
 QUESTIONS = [
-    # {"question": "...", "expects": "..."},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
+    {"question": "How long are the wait times at Kestrel Commons between 12:15 and 1:00?", "expects": "20 to 25 minutes"},
+    {"question": "What food station at Kestrel Commons is made to order?", "expects": "stir-fry"},
+    {"question": "Are the CS 210 midterms and final curved?", "expects": "midterms are curved"},
+    {"question": "Which floors in Aldridge Hall are designated as quiet floors?", "expects": "3 and 4"},
+    {"question": "Until what time is the library open during term?", "expects": "2am"},
 ]
 
 # Questions from a different world entirely. Your gate should refuse all five.
