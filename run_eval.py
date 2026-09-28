@@ -35,6 +35,7 @@ you a scorer; you'd learn nothing from it.
 import argparse
 import datetime as dt
 import sys
+import time
 from pathlib import Path
 
 import config
@@ -52,20 +53,32 @@ def load_scorer():
 
 
 def run_once(question: str, top_k, threshold, corpus, variant):
-    """One question, one run. Returns the answer and what retrieval gave us."""
+    """One question, one run, including end-to-end elapsed time."""
     from store import search
     import gate
     from generate import answer_from_chunks
 
+    started = time.perf_counter()
     results = search(question, top_k=top_k, corpus=corpus, variant=variant)
     decision = gate.check(results, threshold=threshold)
 
     if not decision.passed:
-        return gate.REFUSAL, results, decision
+        return (
+            gate.REFUSAL,
+            results,
+            decision,
+            time.perf_counter() - started,
+            None,
+        )
 
     # cache=False on purpose. Three runs have to be three real answers.
-    answer = answer_from_chunks(question, results, cache=False)
-    return answer, results, decision
+    try:
+        answer = answer_from_chunks(question, results, cache=False)
+        error = None
+    except Exception as exc:  # Keep the failed run as evidence instead of crashing.
+        answer = f"ERROR: {type(exc).__name__}: {exc}"
+        error = f"{type(exc).__name__}: {exc}"
+    return answer, results, decision, time.perf_counter() - started, error
 
 
 def main():
@@ -109,14 +122,23 @@ def main():
 
         run_results = []
         for run in range(1, args.runs + 1):
-            answer, results, decision = run_once(
+            answer, results, decision, elapsed_seconds, error = run_once(
                 question, top_k, threshold, corpus, args.variant
             )
-            passed = judge(question, expects, answer, results) if judge else None
+            passed = (
+                judge(question, expects, answer, results)
+                if judge and error is None
+                else False if error is not None
+                else None
+            )
             run_results.append(passed)
 
             mark = {True: "pass", False: "fail", None: "—"}[passed]
-            print(f"  run {run}: {mark}  (best distance {decision.best_distance:.3f})")
+            print(
+                f"  run {run}: {mark}  "
+                f"(best distance {decision.best_distance:.3f}, "
+                f"{elapsed_seconds:.2f}s)"
+            )
 
             transcript.append(
                 {
@@ -126,6 +148,8 @@ def main():
                     "sources": sorted({r.source for r in results}),
                     "best_distance": decision.best_distance,
                     "gate_passed": decision.passed,
+                    "elapsed_seconds": elapsed_seconds,
+                    "error": error,
                 }
             )
 
@@ -253,6 +277,8 @@ def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, sc
             "",
             f"- Best distance: {entry['best_distance']:.4f} "
             f"({'passed' if entry['gate_passed'] else 'refused by'} the gate)",
+            f"- End-to-end response time: {entry['elapsed_seconds']:.2f} seconds",
+            *([f"- Model-call failure: {entry['error']}"] if entry["error"] else []),
             f"- Sources retrieved: {', '.join(entry['sources']) or 'none'}",
             "",
             "```",
