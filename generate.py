@@ -249,16 +249,21 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
         except Exception as exc:  # noqa: BLE001 — surfaced below
             last_error = exc
             message = str(exc).lower()
-            rate_limited = (
+            retryable = (
                 "429" in message
                 or "resource" in message and "exhaust" in message
                 or "rate" in message and "limit" in message
+                or "503" in message
+                or "unavailable" in message
+                or "high demand" in message
             )
-            if not rate_limited:
+            if not retryable:
                 raise
+            if attempt == config.MAX_RETRIES - 1:
+                break
             backoff = 2 ** attempt
             print(
-                f"  [rate limit] service pushed back. Retrying in {backoff}s "
+                f"  [temporary service error] retrying in {backoff}s "
                 f"(attempt {attempt + 1} of {config.MAX_RETRIES}).",
                 file=sys.stderr,
                 flush=True,
@@ -266,7 +271,8 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
             time.sleep(backoff)
 
     raise RuntimeError(
-        f"Still rate limited after {config.MAX_RETRIES} attempts. Wait a "
+        f"The model service was still unavailable after {config.MAX_RETRIES} "
+        f"attempts. Wait a "
         f"minute and try again — your key is fine.\nLast error: {last_error}"
     )
 
